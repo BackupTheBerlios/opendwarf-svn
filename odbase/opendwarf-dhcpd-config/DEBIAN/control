@@ -1,0 +1,13 @@
+Package: opendwarf-dhcpd-config
+Version: 1.0.0-1
+Section: net
+Priority: optional
+Architecture: i386
+Essential: no
+Pre-Depends: debconf (>= 0.5) | debconf-2.0
+Depends: dhcp3-server (>=3.1.0)
+Recommends: opendwarf-environment
+Installed-Size: 25
+Maintainer: Stefan Nistelberger <scuq@abyle.org>
+Description: This Package contains the dhcpd.conf
+             
