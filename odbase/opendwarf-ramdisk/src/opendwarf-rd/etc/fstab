@@ -1,0 +1,17 @@
+# /etc/fstab - static file system information
+proc           /proc          proc   rw,nosuid,nodev,noexec                 0      0
+usbfs          /proc/bus/usb  usbfs  defaults,devmode=0666                  0      0
+sysfs          /sys           sysfs  rw,nosuid,nodev,noexec                 0      0
+devpts         /dev/pts       devpts mode=0622                              0      0
+/dev/fd0       /mnt/floppy    auto   users,noauto,exec                      0      0
+/dev/cdrom     /mnt/cdrom     auto   users,noauto,exec,ro                   0      0
+/dev/dvd       /mnt/dvd       auto   users,noauto,exec,ro                   0      0
+tmpfs          /etc/network/run tmpfs defaults,noatime
+tmpfs          /tmp           tmpfs   defaults,noatime
+tmpfs          /var/lock      tmpfs   defaults,noatime                   0 0
+tmpfs          /var/log       tmpfs   defaults,noatime                   0 0
+tmpfs          /root       tmpfs   defaults,noatime                   0 0
+tmpfs          /home       tmpfs   defaults,noatime                   0 0
+tmpfs          /var/run       tmpfs   defaults,noatime                   0 0
+tmpfs          /var/tmp       tmpfs   defaults,noatime  
+tmpfs	       /etc/udev/rules.d tmpfs defaults,noatime

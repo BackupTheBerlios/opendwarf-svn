@@ -1,0 +1,1066 @@
+#!/static/sh
+# Filename: /etc/init (linuxrc)
+# Purpose:  booting the system
+# Authors:  (c) Klaus Knopper <knoppix@knopper.net>, (c) Michael Prokop <mika@grml.org>, Stefan Nistelberger <scuq@abyle.org>
+# Latest change: Thu Oct 18 15:10:51 CEST 2007
+#######################################################################################
+
+#################################### global ###########################################
+
+# Default maximum size of dynamic ramdisk in kilobytes
+RAMSIZE=1000000
+
+INSMOD="/static/insmod"
+RMMOD="/static/rmmod"
+
+PATH=/static
+
+#######################################################################################
+
+
+##################################### functions #######################################
+
+getnetworkinterface() {
+
+	# get network interface
+
+	# try to read a bootparameter 
+	dhcp_iface_=$(getbootparam dhcp_iface)
+
+	# if no dhcp_iface bootparamter is set try to grep it from ifconfig
+	if [ -z "$dhcp_iface_" ]; then
+		dhcp_iface_=`ifconfig -a | grep '^eth' | sed 's/ .*//'`
+	fi
+
+	INTERFACE=${dhcp_iface_}
+
+}
+
+copyinitscripts() {
+ log_begin_msg "copying opendwarf init.d scripts"
+ cp -r /opendwarf-rd/etc/init.d/gloin /etc/init.d/ && echo "  $SUCCESS" || echo " $FAILED "
+}
+
+copyhwdetect() {
+ log_begin_msg "copying hardware detection scripts"
+ cp -r /opendwarf-rd/etc/init.d/gloin/hw* /usr/bin && echo "  $SUCCESS" || echo " $FAILED "
+}
+
+createnicinfo() {
+ log_begin_msg "creating nic information file"
+ echo $netmodule > /etc/nic && echo "  $SUCCESS" || echo " $FAILED "
+}
+
+copyrunlevelconf() {
+ log_begin_msg "copying runlevel.conf from ramdisk"
+ cp -r /opendwarf-rd/etc/runlevel.conf /etc/ && echo "  $SUCCESS" || echo " $FAILED "
+}
+
+copyrunlevelconfhwd() {
+  log_begin_msg "copying runlevel.conf from ramdisk"
+  cp -r /opendwarf-rd/etc/runlevel.conf.hwd /etc/runlevel.conf && echo "  $SUCCESS" || echo " $FAILED "
+}
+
+copydhclientconf() {
+ log_begin_msg "copying dhclient configuration from ramdisk"
+ cp -r /opendwarf-rd/etc/dhcp3/* /etc/dhcp3/ && echo "  $SUCCESS" || echo " $FAILED "
+}
+
+setipconfig() {
+
+	if [ "$USBBOOT" == "false" ] ; then
+
+		# grep out the config from the ip bootparameter
+		IP=`echo "$IPSETTINGS" | cut -f2 -d "=" | cut -f1 -d ":"`
+		BOOTSERVER=`echo "$IPSETTINGS" | cut -f2 -d "=" | cut -f2 -d ":"`
+		GATEWAY=`echo "$IPSETTINGS" | cut -f2 -d "=" | cut -f3 -d ":"`
+		NETMASK=`echo "$IPSETTINGS" | cut -f2 -d "=" | cut -f4 -d ":"`
+
+		log_begin_msg "setting your ip for ${INTERFACE}: $IP/$NETMASK" 
+		ifconfig ${INTERFACE} $IP netmask $NETMASK up  && echo "  $SUCCESS" || echo " failed "
+
+		log_begin_msg "adding default gateway: $GATEWAY" 
+		route add default gw $GATEWAY  && echo "  $SUCCESS" || echo " failed "
+	else	
+		log_begin_msg "local boot without ip" && echo 
+	fi
+
+}
+
+createsysdirs() {
+	mkdir /dev/shm
+}
+
+createramdisk() {
+
+	FOUNDMEM="$(awk '/MemTotal/{print $2}' /proc/meminfo)"
+	TOTALMEM="$(awk 'BEGIN{m=0};/MemFree|Cached/{m+=$2};END{print m}' /proc/meminfo)"
+
+	if [ -n "$FOUNDMEM" ] ; then
+		log_begin_msg "Total memory found: $FOUNDMEM kB" ; echo "       $SUCCESS"
+	else
+   		log_failure_msg "Could not fetch memory information." ; echo "     $FAILED"
+	fi
+
+	MINSIZE=20000
+	MINLEFT=16000 # At least this much memory minus 30% should remain when home and var are full.
+
+	[ -n "$TOTALMEM" ] && MAXSIZE="$(/usr/bin/expr $TOTALMEM - $MINLEFT)" # Maximum ramdisk size
+
+	[ -n "$TOTALMEM" ] && RAMSIZE="$(/usr/bin/expr $TOTALMEM / 5)" # Default ramdisk size for ramdisk
+
+	test -z "$RAMSIZE" -o "$RAMSIZE" -lt "$MINSIZE" && RAMSIZE="$MINSIZE"
+
+	mkdir -p /ramdisk
+
+	RAMSIZE=$(/usr/bin/expr $RAMSIZE \* 4) # tmpfs/varsize version, can use swap
+
+	log_begin_msg "Creating /ramdisk (dynamic size=${RAMSIZE}k) on shared memory"
+
+	/bin/mount -t tmpfs -o "size=${RAMSIZE}k" /ramdisk /ramdisk  && echo "$SUCCESS"
+
+}
+
+createramdiskdirs() {
+	for rddir in $@; do
+		subdircount=`echo $rddir | awk -F"/" '{print NF - 1 }'`
+		mkdir -p /ramdisk$rddir
+		if [ $subdircount -gt 1 ]; then
+			maindir=`echo $rddir | cut -f2 -d "/"`
+			mv /$maindir /$maindir.old >/dev/null 2>&1
+			log_begin_msg "linking /$maindir to ramdisk" ; echo
+			ln -snf /ramdisk/$maindir /$maindir
+			rm -rf /$maindir.old >/dev/null 2>&1
+		else
+			mv $rddir $rddir.old >/dev/null 2>&1
+			log_begin_msg "linking $rddir to ramdisk" ; echo
+			ln -snf /ramdisk$rddir $rddir
+			rm -rf $rddir.old >/dev/null 2>&1
+		fi
+	done	
+
+}
+
+createsudoers() {
+	echo "root ALL=(ALL) ALL" > /etc/sudoers
+	echo "$USER ALL=NOPASSWD: ALL" >> /etc/sudoers
+}
+
+mketcdir() {
+	mkdir /etc/opendwarf
+}
+
+creatediscoverdinterface() {
+	echo "$INTERFACE" > /etc/opendwarf/discoverd_interface
+}
+
+createnetworkinterfaces() {
+	echo "auto lo" > /etc/network/interfaces
+	echo "auto $INTERFACE" >> /etc/network/interfaces
+	echo "iface lo inet loopback" >> /etc/network/interfaces
+	echo "iface $INTERFACE inet dhcp" >> /etc/network/interfaces
+	creatediscoverdinterface
+}
+
+
+mountnfs() {
+	options="$3"
+
+	mount -t nfs $options $1 $2 >/dev/null 2>&1 
+	mount | grep $1
+
+	if [ $? -ne 0 ]; then
+		return 1
+	else
+		return 0
+	fi
+
+	return 1
+}
+
+mountproc() {
+	mount -t proc /proc /proc
+}
+
+mountsquashfs()
+{
+  if test -n "$FOUND_USEABLE_SYSTEM" -a -f $1/$SYSTEM_DIR/$SYSTEM_NAME; then
+    mount -t squashfs $1/$SYSTEM_DIR/$SYSTEM_NAME $SYSTEM_RO_MOUNTPOINT -o loop,ro$SECURE || FOUND_USEABLE_SYSTEM=""
+  fi
+}
+
+remount_grml()
+{
+  if test -f $TARGET/$SYSTEM_DIR/$SYSTEM_NAME; then
+    umount $SYSTEM_RO_MOUNTPOINT # unmount it
+    umount $SOURCE  # unmount CD
+    [ -n "$SOURCE2" ] && umount $SOURCE2  # umount possible loop-device
+    mount_grml $TARGET
+  else
+    log_failure_msg "Warning: Changing to $TARGET failed."
+    return 1
+  fi
+
+  return 0
+}
+
+create_system_softlinks()
+{
+	ln -s $SYSTEM_RO_MOUNTPOINT/bin /bin
+	ln -s $SYSTEM_RO_MOUNTPOINT/bin /sbin
+	ln -s $SYSTEM_RO_MOUNTPOINT/boot /boot
+	ln -s $SYSTEM_RO_MOUNTPOINT/lib /lib
+	ln -s $SYSTEM_RO_MOUNTPOINT/opt /opt
+	ln -s $SYSTEM_RO_MOUNTPOINT/usr /usr
+}
+
+boot_from()
+{
+  # preparations
+  /bin/mkdir $TARGET
+
+  SOURCE_DEV=$(echo $CMDLINE | /usr/bin/tr ' ' '\n' | /bin/sed -n '/bootfrom=/s/.*=//p' | /usr/bin/tail -1)
+
+  LOOP_DEV=$(echo $SOURCE_DEV | /usr/bin/gawk -F/ '{ print $1 "/" $2 "/" $3 }')
+  ISO_PATH=$(echo $SOURCE_DEV | /bin/sed "s|$LOOP_DEV||g" )
+  case "$ISO_PATH" in /*.[iI][sS][oO]) ;; *) ISO_PATH="" ;; esac
+  LOOP_SOURCE=""
+
+  if [ -n "$ISO_PATH" ]; then
+     LOOP_SOURCE="$TARGET.loop"
+     LOOP_SOURCE2="$LOOP_SOURCE"
+     TARGET_DEV="$LOOP_SOURCE$ISO_PATH"
+     /bin/mkdir $LOOP_SOURCE
+     /bin/mount -o ro $LOOP_DEV $LOOP_SOURCE || LOOP_SOURCE=""
+     /bin/mount -n -o loop $LOOP_SOURCE2$ISO_PATH $TARGET
+  else
+     TARGET_DEV="$SOURCE_DEV"
+    /bin/mount -n -o ro $SOURCE_DEV $TARGET
+  fi
+  if [ $? -ne 0 ]; then
+     [ -n "$LOOP_SOURCE" ] && /bin/umount $LOOP_SOURCE
+     log_failure_msg "Accessing CD-ROM Simulation failed. ${MAGENTA}$TARGET_DEV${NORMAL} is not mountable."
+     sleep 2
+     return 1
+  fi
+
+  if [ -f $TARGET/$SYSTEM_DIR/$SYSTEM_NAME ]; then
+    log_begin_msg "Accessing CD-ROM Simulation at ${MAGENTA}$TARGET_DEV${NORMAL}." ; echo "  $SUCCESS"
+  else
+    log_failure_msg "Accessing CD-ROM Simulation failed. Could not find $SYSTEM_DIR/$SYSTEM_NAME on ${MAGENTA}$TARGET_DEV${RED}.${NORMAL}"
+    [ -n "$LOOP_SOURCE" ] && /bin/umount $LOOP_SOURCE
+    umount $TARGET
+    sleep 2
+    return 1
+  fi
+  # remount the CD
+  remount_grml
+}
+
+copy_to()
+{
+  # preparations
+  /bin/mkdir $TARGET
+  COPY="$SOURCE/$SYSTEM_DIR"
+
+  # look if we copy to hd or to ram
+  SIZE="$(/usr/bin/du -s $COPY | /usr/bin/gawk '{print int($1*1.1)}')"
+  test -n "$SIZE" || SIZE="800000"
+
+  case "$1" in
+    ram)
+      TARGET_DEV="/dev/shm"
+      TARGET_DEV_DESC="ramdisk"
+      FOUNDSPACE="$(/usr/bin/gawk '/MemTotal/{print $2}' /proc/meminfo)"
+      /bin/mount -n -t tmpfs -o size=${SIZE}k $TARGET_DEV $TARGET
+    ;;
+    hd)
+      TARGET_DEV=$(echo $CMDLINE | /usr/bin/tr ' ' '\n' | /bin/sed -n '/tohd=/s/.*=//p' | /usr/bin/tail -1)
+      TARGET_DEV_DESC="$TARGET_DEV"
+      # load filesystems
+      $SYSTEM_RO_MOUNTPOINT/sbin/modprobe fuse
+      $SYSTEM_RO_MOUNTPOINT/sbin/modprobe ntfs
+      FS="ext3 ext2 reiserfs reiser4 vfat ntfs"
+
+      MOUNTED=""
+      for i in $FS; do
+       if $SYSTEM_RO_MOUNTPOINT/bin/mount -o rw -t "$i" "$TARGET_DEV" "$TARGET"; then
+        MOUNTED="true"
+        break
+       fi
+      done
+      if test -z "$MOUNTED"; then
+        log_failure_msg "Copying CD-ROM Simulation failed. ${MAGENTA}$TARGET_DEV_DESC${NORMAL} is not mountable."
+        sleep 2
+        return 1
+      fi
+      # check for enough free space
+      USED_SPACE=0
+      [ -f $TARGET/$SYSTEM_DIR/$SYSTEM_NAME ] && USED_SPACE=$(/usr/bin/du -s $TARGET/$SYSTEM_DIR/$SYSTEM_NAME | /usr/bin/gawk '{ print $1 }')
+      FOUNDSPACE="$(/bin/df -k $TARGET | /usr/bin/tail -1 | /usr/bin/gawk '{ print $4+int('$USED_SPACE') }')"
+   ;;
+   *)
+     return 1
+   ;;
+  esac
+
+  # sanity check
+
+  if [ $FOUNDSPACE -lt $SIZE ]
+  then
+    log_failure_msg "Copying CD-ROM Simulation failed. Not enough free space on ${MAGENTA}${TARGET_DEV_DESC}${NORMAL}. Found: ${MAGENTA}${FOUNDSPACE}k${NORMAL} Need: ${MAGENTA}${SIZE}k${NORMAL}"
+    sleep 2
+    umount $TARGET
+    return 1
+  fi
+
+  # do the real copy
+
+  log_begin_msg "Copying CD-ROM Simulation to ${TARGET_DEV_DESC}... Please be patient."
+  echo
+  if [ -z "$use_cp" -a -x /usr/bin/rsync ]
+  then
+    # first cp the small files
+    /usr/bin/rsync -a --exclude="$SYSTEM_DIR/$SYSTEM_NAME" $COPY $TARGET # Copy system to $TARGET
+    # then the big file with nice progress meter
+    [ -f $TARGET/$SYSTEM_DIR/$SYSTEM_NAME ] && /bin/rm -f $TARGET/$SYSTEM_DIR/$SYSTEM_NAME
+    /usr/bin/rsync -a --progress --include="$SYSTEM_DIR/$SYSTEM_NAME" --include="$SYSTEM_DIR/" --exclude="*" $COPY $TARGET 
+    #/usr/bin/rsync -avP $COPY $TARGET # 
+    # make sure to support directories from http://grml.org/config/
+    for dir in scripts bootparams config debs ; do
+        if [ -d "/cdrom/$dir" ] ; then
+           log_begin_msg "Customization directory $dir found, copying to $TARGET"
+           cp -a /cdrom/$dir $TARGET/ && echo "$SUCCESS" || echo "$FAILED"
+        fi
+    done
+  else
+    /bin/cp -a -f $COPY $TARGET 
+  fi
+  if [ $? -ne 0 ]
+  then
+    log_failure_msg "Copying CD-ROM Simulation failed. ${MAGENTA}$TARGET_DEV_DESC${NORMAL} possibly has not enough space left."
+    sleep 2
+    return 1
+  fi
+  # remount r/o
+  /bin/mount -n -o remount,ro $TARGET 1>/dev/null 2>&1
+  remount_grml
+}
+
+
+
+# Simple shell grep
+stringinfile(){
+  case "$(cat $2)" in *$1*) return 0;; esac
+  return 1
+}
+
+# same for strings
+stringinstring(){
+  case "$2" in *$1*) return 0;; esac
+  return 1
+}
+
+getbootparam(){
+  stringinstring " $1=" "$CMDLINE" || return 1
+  result="${CMDLINE##*$1=}"
+  result="${result%%[   ]*}"
+  echo "$result"
+  return 0
+}
+
+# Check boot commandline for specified option
+checkbootparam(){
+  stringinstring " $1" "$CMDLINE"
+  return "$?"
+}
+
+mountsysfs() {
+	mount -t sysfs /sys /sys >/dev/null 2>&1
+}
+
+mountpts(){
+	mount -t devpts /dev/pts /dev/pts
+}
+
+disable_kernel_messages() {
+	echo "0" > /proc/sys/kernel/printk
+}
+
+clean_input_output() {
+	exec >/dev/console </dev/console 2>&1
+}
+
+checkcolors() {
+
+if checkbootparam "nocolor" ; then
+  echo "Disabling colors in bootsequence as requested on commandline."
+  # Reset fb color mode
+  RESET="]R"
+  # ANSI COLORS
+  # Erase to end of line
+  CRE="[K"
+  # Clear and reset Screen
+  CLEAR="c"
+else
+  # Reset fb color mode
+  RESET="]R"
+  # ANSI COLORS
+  # Erase to end of line
+  CRE="[K"
+  # Clear and reset Screen
+  CLEAR="c"
+  # Normal color
+  NORMAL="[0;39m"
+  # RED: Failure or error message
+  RED="[1;31m"
+  # GREEN: Success message
+  GREEN="[1;32m"
+  # YELLOW: Descriptions
+  YELLOW="[1;33m"
+  # BLUE: System mesages
+  BLUE="[1;34m"
+  # MAGENTA: Found devices or drivers
+  MAGENTA="[1;35m"
+  # CYAN: Questions
+  CYAN="[1;36m"
+  # BOLD WHITE: Hint
+  WHITE="[1;37m"
+fi
+
+}
+
+print_bootlogo() {
+	echo ""
+	echo ""
+	echo ""
+	echo "${GREEN}                             _                      ___ "
+	echo "${GREEN}                            | |                    / __)"
+	echo "${GREEN}  ___  ____  _____ ____   __| |_ _ _ _____  ____ _| |__ "
+	echo "${GREEN} / _ \|  _ \| ___ |  _ \ / _  | | | (____ |/ ___|_   __)"
+	echo "${GREEN}| |_| | |_| | ____| | | ( (_| | | | / ___ | |     | |   "
+	echo "${GREEN} \___/|  __/|_____)_| |_|\____|\___/\_____|_|     |_|   "
+	echo "${GREEN}      |_|   "
+	echo ""
+	echo ""
+}
+
+print_version() {
+	echo "${WHITE}opendwarf - workstation (based on debian etch)."
+}
+
+log_failure_msg () {
+  echo " ${RED}*${NORMAL} $@"
+}
+
+# int log_begin_message (char *message)
+log_begin_msg () {
+  echo -n " ${GREEN}*${NORMAL} $@"
+}
+
+log_section () {
+  echo " ${GREEN}$@${NORMAL} "
+}
+
+log_warn_msg () {
+  echo -n " ${YELLOW}*${NORMAL} $@"
+}
+
+log_error_msg () {
+  echo -n " ${RED}*${NORMAL} $@"
+}
+
+rundebugshell(){
+ stage="$1"
+ if [ -n "$DEBUG" ]; then
+  log_begin_msg "Starting intermediate shell stage $stage as requested by \"debug\" option."
+  echo ""
+  echo "   ${GREEN}-${NORMAL} Just exit the shell to continue boot process...${NORMAL}"
+  if [ -x /static/sh ]; then
+    /static/sh
+  else
+    /bin/bash
+  fi
+ fi
+}
+
+#######################################################################################
+
+
+##################################### entry point #####################################
+
+
+# Don't allow interrupt signals
+trap "" 1 2 3 15
+
+FOUND_SCSI=""
+FOUND_USEABLE_SYSTEM=""
+INTERACTIVE=""
+
+clean_input_output
+
+mountproc
+
+# read boot commandline
+CMDLINE="$(cat /proc/cmdline)"
+
+disable_kernel_messages
+
+mountpts
+
+mountsysfs
+
+checkcolors
+
+SUCCESS=" ${BLUE}[ ${GREEN}ok ${BLUE}]${NORMAL}"
+FAILED=" ${NORMAL}[${RED}fail${NORMAL}]"
+
+if checkbootparam "splash" ; then
+	echo ""
+	echo "${WHITE}Welcome to"
+	print_bootlogo
+	print_version
+	echo "${NORMAL}"
+	exec >/dev/null </dev/null 2>&1
+fi
+
+echo ""
+echo "${WHITE}Welcome to"
+echo ""
+print_bootlogo
+print_version
+echo "${NORMAL}"
+
+
+export PATH
+umask 022
+
+case "$CMDLINE" in *debuglinuxrc*) set -x; echo "linuxrc debugging activated"; DEBUG="yes"; ;; esac
+case "$CMDLINE" in *secure*) SECURE=",nosuid"; ;; esac
+NOUSB=""
+case "$CMDLINE" in *nousb\ *|*nobootusb*) NOUSB="yes"; ;; esac
+NOCD=""
+case "$CMDLINE" in *fromhd*) NOCD="yes"; ;; esac
+case "$CMDLINE" in *fromdvd*) FROMDVD="yes"; ;; esac
+case "$CMDLINE" in *idecd*|*atapicd*) IDECD="yes"; ;; esac
+case "$CMDLINE" in *noideraid*) NOIDERAID="yes"; ;; esac
+USB2="ehci-hcd.ko"
+case "$CMDLINE" in *nousb2*) USB2="" NOUSB2="yes"; ;; esac
+case "$CMDLINE" in *\ usb*) USB="yes"; ;; esac
+SYSTEM_DIR="SYSTEM"
+SYSTEM_RO_MOUNTPOINT="/system"
+SYSTEM_NAME="SQFS.IMG"
+case "$CMDLINE" in *system_dir=*) SYSTEM_DIR="$system_dir"; ;; esac
+case "$CMDLINE" in *system_name=*) SYSTEM_NAME="$system_name"; ;; esac
+case "$CMDLINE" in *system_mountpoint=*) SYSTEM_RO_MOUNTPOINT="$system_mountpoint"; ;; esac
+USER="gimli"
+case "$CMDLINE" in *user_name=*) USER="$user_name"; ;; esac
+GROUP="users"
+case "$CMDLINE" in *group_name=*) GROUP="$group_name"; ;; esac
+USERPASS="password"
+case "$CMDLINE" in *userpass=*) USERPASS="$userpass"; ;; esac
+USBBOOT="false"
+case "$CMDLINE" in *usb=*) USBBOOT="$usb"; ;; esac
+DROP="false"
+case "$CMDLINE" in *drop=*) DROP="$drop"; ;; esac
+MASTER="false"
+case "$CMDLINE" in *master=*) MASTER="$master"; ;; esac
+
+# read nfsdir from cmdlines (bootparameters)
+for i in $cmdline; do case "$i" in nfsdir=*|NFSDIR=*) eval $i;; esac; done
+[ -n "$nfsdir" ] && NFS="$nfsdir"
+
+if [ -n "$DEBUG" ]; then
+   log_begin_msg "Bootoption debug detected. Printing kernel command line:"
+   echo ""
+   cat /proc/cmdline
+fi
+
+#############################################################
+stage=1 # reading and setting kernel stuff
+#############################################################
+
+if checkbootparam scandelay ; then
+  DELAY="$(getbootparam 'scandelay' 2>/dev/null)"
+  [ -z $DELAY ] && DELAY='10'
+  log_begin_msg "Delaying bootsequence as requested for ${WHITE}${DELAY}${NORMAL} seconds."
+  sleep $DELAY && echo "  $SUCCESS"
+fi
+
+disable_kernel_messages
+
+
+
+
+
+#############################################################
+stage=2 # set network configuration and mount system
+#############################################################
+
+
+
+# get boot parameter ip - IPAPPEND from pxelinux bootloader
+IPSETTINGS="$(getbootparam 'ip' 2>/dev/null)"
+
+			
+	
+
+        #if [ ! -n "$INTERFACE" ]; then
+        #        log_error_msg "no valid networkinterface found."
+        #fi
+
+	# get the name of the networkcard kernel module to load
+	NICMODULE="$(getbootparam 'nicdriver' 2>/dev/null)"
+
+        if [ ! -n "$NICMODULE" ]; then
+	
+		log_section "Detecting Network Module"
+
+			for netmodule in `find /modules/net |grep .ko$`; do
+				$INSMOD $netmodule >/dev/null 2>&1
+				INTERFACE=""
+				getnetworkinterface
+				if [ -z "$INTERFACE" ]; then
+					$RMMOD `basename $netmodule | sed 's/.ko//g'` >/dev/null 2>&1
+				else
+					log_begin_msg "Found network driver module: `basename $netmodule | sed 's/.ko//g'`"; echo
+					setipconfig
+					break
+				fi
+			done
+	else
+
+
+		log_begin_msg "loading network driver module: $NICMODULE"
+		$INSMOD /modules/net/$NICMODULE >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+	getnetworkinterface
+	setipconfig
+
+	fi
+
+log_begin_msg "loading usb core "
+$INSMOD /modules/usb/core/usbcore.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+log_begin_msg "loading usb ehci host driver "
+$INSMOD /modules/usb/host/ehci-hcd.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+log_begin_msg "loading usb uhci host driver "
+$INSMOD /modules/usb/host/uhci-hcd.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+log_begin_msg "loading usb ohci host driver "
+$INSMOD /modules/usb/host/ohci-hcd.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+log_begin_msg "loading usb keyboard driver  "
+$INSMOD /modules/usb/input/usbkbd.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+
+if [ "$USBBOOT" == "true" ] ; then
+	unset NFS
+	log_begin_msg "Bootoption USB found." ; echo "$SUCCESS"
+
+
+	log_begin_msg "loading scsi generic "
+	$INSMOD /modules/scsi/sg.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+	log_begin_msg "loading usb storage "
+	$INSMOD /modules/usb/storage/usb-storage.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed " 
+
+	log_begin_msg "waiting for usb storage device"
+	sda_detected="false"
+
+
+	while [ "$sda_detected" == "false" ]
+	do
+        	sleep 1
+        	dmesg | grep sda 1>/dev/null 2>&1 && sda_detected="true"
+	done
+
+	if [ "$sda_detected" == "true" ]
+	then
+		 echo "  $SUCCESS"
+	else
+		echo " failed "
+	fi
+	
+
+
+	if [ "$MASTER" == "false" ] ; then
+
+		log_begin_msg "mounting usb device "
+		if mount -t ext3 /dev/sda /cdrom
+		then
+			echo "$SUCCESS"
+
+			if test -f /cdrom/$SYSTEM_DIR/$SYSTEM_NAME
+			then
+				log_begin_msg "Accessing SYSTEM CDROM-Simulation at ${MAGENTA}/dev/sda{NORMAL}" ; echo "$SUCCESS"
+				FOUND_USEABLE_SYSTEM="/dev/sda"
+				create_system_softlinks
+				break
+			fi
+
+		else
+			echo echo " failed "
+		fi
+
+	else
+		log_begin_msg "mounting usb device master filesystem read-write"
+		if mount -t ext3 /dev/sda /cdrom
+		then
+			echo "$SUCCESS"
+		else
+	                echo "${RED}failed to mount /dev/sda.${NORMAL}"
+	                echo "${RED}Now dropping you to the busybox shell.${NORMAL}"
+       		        echo "${RED}Press reset button to quit.${NORMAL}"
+        	        /static/sh
+		fi
+	
+
+
+		log_begin_msg "copying opendwarf config to filesystem" ; echo
+		cp -a /cdrom/opendwarf/filesystem/* /cdrom/
+	
+		log_begin_msg "copying opendwarf fstab to filesystem" ; echo
+		cp -a /opendwarf-rd/etc/fstab /cdrom/etc/
+
+		log_begin_msg "copying opendwarf init.d scripts"
+		cp -a /opendwarf-rd/etc/init.d/gloin /cdrom/etc/init.d/ && echo "  $SUCCESS" || echo " $FAILED "
+
+ 		log_begin_msg "copying runlevel.conf from ramdisk"
+ 		cp -a /opendwarf-rd/etc/runlevel.conf_master /cdrom/etc/runlevel.conf && echo "  $SUCCESS" || echo " $FAILED "
+
+
+                cd /cdrom
+
+		log_begin_msg "Telling kernel the new root device"; echo
+		echo "0x700" > /proc/sys/kernel/real-root-dev
+
+		log_begin_msg "making sure we dont keep /dev busy" ; echo
+		exec <dev/console >dev/console 2>&1
+
+	if [ "$DROP" == "true" ] ; then
+ 		echo "${RED}Now dropping you to the busybox shell.${NORMAL}"
+ 		echo "${RED}Press reset button to quit.${NORMAL}"
+    		/static/sh
+	fi
+
+                log_begin_msg "pivot_root to usb" ; echo
+                pivot_root . initrd
+
+		# Set paths
+		log_begin_msg "Setting paths"
+		PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/X11R6/bin:."
+		export PATH
+		echo
+
+		# Extremely important, init crashes on shutdown if this is only a link
+		:> /etc/ioctl.save
+		:> /etc/pnm2ppa.conf
+
+		createsudoers
+ 		log_begin_msg "creating /etc/opendwarf"
+		mketcdir && echo "  $SUCCESS" || echo " $FAILED " 
+
+ 		log_begin_msg "writing network informations to /etc/opendwarf"
+		creatediscoverdinterface && echo "  $SUCCESS" || echo " $FAILED "
+
+                log_begin_msg "Umounting ramdisk /sys" ; echo
+		/bin/umount -f /initrd/sys
+
+                log_begin_msg "Umounting ramdisk /proc" ; echo
+                /bin/umount /initrd/proc
+
+		log_begin_msg "Umounting ramdisk /dev/pts" ; echo
+                /bin/umount /initrd/dev/pts
+
+
+                log_begin_msg "Change root to USB and executing init" ; echo
+		shift 1
+		exec /usr/sbin/chroot . /sbin/init $*
+
+
+
+
+
+
+	fi
+		
+
+
+fi
+
+
+# if nfs stuff detected in  the bootparameters
+if [ -n "$NFS" ]; then
+
+	tmp_="$(getbootparam nfsdir)"
+
+	log_begin_msg "Bootoption NFS found." ; echo "$SUCCESS"
+
+	NFS=$GATEWAY:$NFS
+
+
+		# remove extra modules
+
+		log_begin_msg "Looking for SYSTEM in: ${MAGENTA}$NFS${NORMAL}" ; echo "$SUCCESS"
+		if mount -t nfs "$NFS" -o "async,ro,nolock" /cdrom #>/dev/null 2>&1
+		then
+			if test -f /cdrom/$SYSTEM_DIR/$SYSTEM_NAME
+			then
+				log_begin_msg "Accessing SYSTEM CDROM-Simulation at ${MAGENTA}$NFS${NORMAL}" ; echo "$SUCCESS"
+				FOUND_USEABLE_SYSTEM="$NFS"
+				create_system_softlinks
+				break
+			fi
+		fi
+
+
+
+fi
+
+log_begin_msg "loading kernel lzma unpack support "
+$INSMOD /modules/lib/unlzma.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed "
+
+log_begin_msg "loading kernel lzma support "
+$INSMOD /modules/lib/sqlzma.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed "
+
+log_begin_msg "loading kernel squahfs-lzma support "
+$INSMOD /modules/fs/squashfs.ko >/dev/null 2>&1 && echo "  $SUCCESS" || echo " failed "
+
+mountsquashfs /cdrom
+
+
+
+COPYTO=""
+BOOTFROM=""
+DO_REMOUNT=""
+REAL_TARGET=""
+UNIONFS=""
+
+case "$CMDLINE" in *toram*) DO_REMOUNT="yes"; COPYTO="ram"; ;; esac
+case "$CMDLINE" in *tohd=*) DO_REMOUNT="yes"; COPYTO="hd"; ;; esac
+case "$CMDLINE" in *bootfrom=*) DO_REMOUNT="yes"; BOOTFROM="yes" ;; esac
+
+if  test -n "$DO_REMOUNT" -a -n "$FOUND_USEABLE_SYSTEM" ; then
+  # copy library cache
+  cat $SYSTEM_RO_MOUNTPOINT/etc/ld.so.cache > /etc/ld.so.cache
+  echo ""
+
+  SOURCE="/cdrom"
+  TARGET="/cdrom2"
+
+  # first copy_to, then boot_from
+  if [ -n "$COPYTO" ]; then
+     copy_to $COPYTO && REAL_TARGET="$TARGET"
+  fi
+  if [ -n "$BOOTFROM" ]; then
+     boot_from
+     if [ "$?" -eq "0" ]; then
+        # set new source / target paths
+        REAL_TARGET="$TARGET"
+        SOURCE2="$LOOP_SOURCE"
+        SOURCE="/cdrom2"
+        TARGET="/cdrom3"
+    fi
+  fi
+fi
+
+# Final test if everything succeeded.
+if test -n "$FOUND_USEABLE_SYSTEM" ; then
+	# copy library cache
+	cat $SYSTEM_RO_MOUNTPOINT/etc/ld.so.cache > /etc/ld.so.cache
+
+UNIONFS=yes
+unionfs='unionfs (using aufs)'
+UNIONFS_FILETYPE='aufs'
+AUFS='yes'
+
+# Set paths
+log_begin_msg "Setting paths"
+PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/X11R6/bin:."
+export PATH
+
+# Make space: We don't need the modules anymore from here.
+$SYSTEM_RO_MOUNTPOINT/bin/rm -rf /modules
+# Debian weirdness
+$SYSTEM_RO_MOUNTPOINT/bin/cp -a $SYSTEM_RO_MOUNTPOINT/etc/alternatives /etc/ 2>/dev/null
+
+
+# From here, we should have all essential commands available.
+hash -r
+
+# Did we remount the source media?
+if  test -n "$REAL_TARGET"; then
+  /bin/mount -n --move $REAL_TARGET /cdrom # move it back and go on to normal boot
+fi
+
+# Clean up /etc/mtab (and - just in case - make a nice entry for looped ISO)
+egrep " $SYSTEM_RO_MOUNTPOINT | /cdrom " /proc/mounts 2>/dev/null | sed 's|/dev/loop0 /cdrom \(.*\) 0 0|'$LOOP_SOURCE$ISO_PATH' /cdrom/ \1,loop=/dev/loop0 0 0|g' >> /etc/mtab
+
+
+# Clean up /
+$SYSTEM_RO_MOUNTPOINT/bin/rm -rf /modules /static
+echo "                       $SUCCESS"
+
+#createramdisk
+#createramdiskdirs /tmp /home/$USER
+
+
+
+#############################################################
+stage=3 # mount unionfs
+#############################################################
+
+log_begin_msg "Creating $unionfs and symlinks on ramdisk"
+mkdir -p /UNIONFS
+echo $UNIONFS
+
+
+if test -n "$UNIONFS" && /bin/mount -t $UNIONFS_FILETYPE -o noatime${SECURE},dirs=/ramdisk=rw:$SYSTEM_RO_MOUNTPOINT=ro /UNIONFS /UNIONFS ; then
+
+ 	# check architecture
+ 	if [ -f $SYSTEM_RO_MOUNTPOINT/lib/ld-linux.so.2 ] ; then
+   		LDLINUX=$SYSTEM_RO_MOUNTPOINT/lib/ld-linux.so.2
+   		LIBPATH=$SYSTEM_RO_MOUNTPOINT/lib
+   		log_begin_msg "Using x86 libs."; echo
+	elif [ -f $SYSTEM_RO_MOUNTPOINT/lib64/ld-linux-x86-64.so.2 ] ; then
+   		LDLINUX=$SYSTEM_RO_MOUNTPOINT/lib64/ld-linux-x86-64.so.2
+   		EMUL='emul'
+   		LIB64='lib64'
+   		LIBPATH=$SYSTEM_RO_MOUNTPOINT/lib64
+   		log_begin_msg "Using x86-64 libs." echo
+	fi
+
+
+	# We now have unionfs, copy some data from the initial ramdisk first
+	#cp -a /opendwarf-rd/etc/fstab /etc/filesystems /etc/mtab /UNIONFS/etc/
+	cp -a /opendwarf-rd/etc/fstab /UNIONFS/etc/
+
+ 	# disable resolvconf on the terminalserver client
+ 	if [ -n "$NFS" ] ; then
+    		rm /UNIONFS/etc/resolv.conf
+    		echo REPORT_ABSENT_SYMLINK=no >> /UNIONFS/etc/default/resolvconf
+	fi
+
+	for i in bin boot etc sbin var opt root usr $EMUL $LIB64 lib ; do # Move directories to unionfs
+  		if test -d /$i; then
+   			/bin/mv /$i /$i.old && \
+   			$LDLINUX --library-path $LIBPATH $SYSTEM_RO_MOUNTPOINT/bin/ln -snf /UNIONFS/$i /$i 1>/dev/null 2>/dev/null
+   			rm -rf /$i.old
+  		else
+   			ln -snf /UNIONFS/$i /$i
+  		fi
+	done
+
+
+
+
+	log_begin_msg "Merging read-only system with read-writeable /ramdisk."
+
+	for i in $(cd /UNIONFS; echo *); do # Create links for new stuff on /UNIONFS
+		test "$i" = "home" -o "$i" = "tmp" && continue
+		test -L "/$i" || test -d "/$i" || test -f "/$i" || ln -snf "/UNIONFS/$i" /$i
+	done && status="success" || status="failed"
+
+	if [ $status == "success" ] ; then
+		echo "   $SUCCESS"
+	else
+		echo "   $FAILED"
+	fi
+
+	else	
+		echo ""
+		log_failure_msg "ERROR: CANNOT UNITE READ-ONLY MEDIA AND INITIAL RAMDISK!"
+		echo "$FAILED"
+		sleep 2
+		echo "Can not continue booting, dropping you to a busybox shell."
+		/bin/bash
+	fi
+
+
+
+#############################################################
+stage=4 # closeup
+#############################################################
+
+
+	cat /etc/passwd | grep $USER >/dev/null 2>&1
+
+	if [ "$?" -eq "1" ]; then
+		log_begin_msg "Adding User $USER. (uid=1000)" ; echo
+		uid1000user=`getent passwd 1000 | cut -d: -f1`
+		userdel $uid1000user >/dev/null 2>&1
+		useradd --home /home/$USER --uid=1000 --gid=100 $USER >/dev/null 2>&1
+	else
+		log_begin_msg "User $USER already exists." ; echo
+	fi
+
+
+	# Create empty utmp and wtmp
+	:> /var/run/utmp
+	:> /var/run/wtmp
+
+	# Make SURE that these are files, not links!
+	rm -rf /etc/ftpusers /etc/passwd /etc/shadow /etc/group \
+       		/etc/ppp /etc/isdn /etc/ssh /etc/ioctl.save \
+       		/etc/inittab /etc/network /etc/sudoers\
+       		/etc/init /etc/localtime /etc/dhcpc /etc/pnm2ppa.conf 2>/dev/null
+
+	cp -a $SYSTEM_RO_MOUNTPOINT/etc/passwd $SYSTEM_RO_MOUNTPOINT/etc/shadow $SYSTEM_RO_MOUNTPOINT/etc/group \
+      		$SYSTEM_RO_MOUNTPOINT/etc/ssh \
+      		$SYSTEM_RO_MOUNTPOINT/etc/inittab $SYSTEM_RO_MOUNTPOINT/etc/network \
+      		$SYSTEM_RO_MOUNTPOINT/sbin/init $SYSTEM_RO_MOUNTPOINT/etc/dhcpc /etc/ 2>/dev/null
+
+	createsudoers
+	mketcdir
+	createnetworkinterfaces
+
+	# Extremely important, init crashes on shutdown if this is only a link
+	:> /etc/ioctl.save
+	:> /etc/pnm2ppa.conf
+
+	# Now tell kernel where the real modprobe lives
+	log_begin_msg "Telling kernel where modprobe lives" ; echo
+	echo "/sbin/modprobe" > /proc/sys/kernel/modprobe
+
+	# Change root device from /dev/fd0 to /dev/ram0
+	log_begin_msg "Telling kernel the new root device"; echo
+	echo "0x100" > /proc/sys/kernel/real-root-dev
+
+	log_begin_msg "Umounting sysfs"
+	/bin/umount -f /sys && echo "  $SUCCESS" || echo " $FAILED "
+
+	createsysdirs
+
+	copyinitscripts
+
+	copyrunlevelconf
+
+
+	copydhclientconf
+
+	copyhwdetect
+	createnicinfo
+
+	log_section "Initial ramdisk-scripts finished."
+
+	# Give control to the init process.
+	log_begin_msg "Starting init process. "
+	[ -r /mountit ] && rm -f /mountit
+	rm -f /linuxrc
+	exit 0
+
+else
+ 	log_failure_msg "Error: unionfs ($UNIONFS) mount failed, sorry."
+
+ 	echo "${RED}Now dropping you to the busybox shell.${NORMAL}"
+ 	echo "${RED}Press reset button to quit.${NORMAL}"
+ 	echo ""
+ 	PS1="system# "
+ 	export PS1
+ 	echo "6" > /proc/sys/kernel/printk
+ 	# Allow signals
+ 	trap 1 2 3 15
+ 	exec /static/sh
+fi
