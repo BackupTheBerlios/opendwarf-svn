@@ -1,0 +1,29 @@
+#!/bin/sh -e
+# Source debconf library.
+. /usr/share/debconf/confmodule
+
+db_version 2.0
+db_title opendwarf-gosa-config
+
+db_get opendwarf-gosa-config/ldapwriteuser
+ldapwriteuser=$RET
+
+db_get opendwarf-gosa-config/ldapwritepassword 
+ldapwritepassword=$RET
+
+db_get opendwarf-gosa-config/ldapbase
+ldapbase=$RET
+ldapurl="ldap://localhost:389/"$ldapbase
+configou="ou=gosa,ou=configs,ou=systems,"$ldapbase
+
+cat /etc/gosa/gosa.conf-trunk | awk '{sub(/\$ADMIN\$/,awk_ldapwriteuser);print}' awk_ldapwriteuser=$ldapwriteuser > /etc/gosa/gosa.conf-trunk_temp
+mv /etc/gosa/gosa.conf-trunk_temp /etc/gosa/gosa.conf-trunk
+
+cat /etc/gosa/gosa.conf-trunk | awk '{sub(/\$PASSWORD\$/,awk_ldapwritepassword);print}' awk_ldapwritepassword=$ldapwritepassword > /etc/gosa/gosa.conf-trunk_temp
+mv /etc/gosa/gosa.conf-trunk_temp /etc/gosa/gosa.conf-trunk
+
+cat /etc/gosa/gosa.conf-trunk | awk '{sub(/\$LDAPURL\$/,awk_ldapurl);print}' awk_ldapurl=$ldapurl > /etc/gosa/gosa.conf-trunk_temp
+mv /etc/gosa/gosa.conf-trunk_temp /etc/gosa/gosa.conf-trunk
+
+cat /etc/gosa/gosa.conf-trunk | awk '{sub(/\$CONFIG\$/,awk_configou);print}' awk_configou=$configou > /etc/gosa/gosa.conf-trunk_temp
+mv /etc/gosa/gosa.conf-trunk_temp /etc/gosa/gosa.conf-trunk

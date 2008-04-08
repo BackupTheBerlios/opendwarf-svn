@@ -1,0 +1,14 @@
+Template: opendwarf-gosa-config/ldapwriteuser
+Type: string
+Description: ldap admin user (dn):
+ We'd like to know your ldap admin user.
+
+Template: opendwarf-gosa-config/ldapwritepassword
+Type: password
+Description: ldap admin password:
+ We'd like to know your ldap admin password.
+
+Template: opendwarf-gosa-config/ldapbase
+Type: string
+Description: ldap base:
+ We'd like to know your ldap base.

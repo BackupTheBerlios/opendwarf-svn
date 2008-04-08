@@ -1,0 +1,9 @@
+DEFAULT opendwarf
+NOESCAPE 1
+
+MENU MAST PASSWD menupass
+
+LABEL opendwarf
+       KERNEL kernels/etch
+       APPEND quiet noswap initrd=ramdisks/etch hwdetection=true ramdisk_size=24000 root=/dev/ram0 rw init=/etc/init vga=normal nfsdir=/tse/images/etch 
+       IPAPPEND 1

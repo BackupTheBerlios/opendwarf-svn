@@ -1,0 +1,14 @@
+Package: opendwarf-tftpboot
+Version: 1.0.0-0
+Section: net
+Priority: optional
+Architecture: i386
+Essential: no
+Pre-Depends: debconf (>= 0.5) | debconf-2.0
+Depends: atftpd, python, python-ldap, dhcp3-server (>=3.1.0), opendwarf-tse
+Recommends: opendwarf-environment
+Installed-Size: 40
+Maintainer: Stefan Nistelberger <scuq@abyle.org>
+Description: This Package contains the /tftpboot directory needed 
+             for booting opendwarf clients via dhcp/tftp
+             It includes a pxelinux binary and config file.

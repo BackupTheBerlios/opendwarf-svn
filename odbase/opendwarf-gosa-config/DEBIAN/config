@@ -1,0 +1,18 @@
+#!/bin/sh -e
+# Source debconf library.
+. /usr/share/debconf/confmodule
+
+db_version 2.0
+db_title opendwarf-gosa-config
+
+db_fset opendwarf-gosa-config/ldapwriteuser seen false
+db_input high opendwarf-gosa-config/ldapwriteuser  || true
+db_go || true
+
+db_fset opendwarf-gosa-config/ldapwritepassword seen false
+db_input high opendwarf-gosa-config/ldapwritepassword  || true
+db_go || true
+
+db_fset opendwarf-gosa-config/ldapbase seen false
+db_input high opendwarf-gosa-config/ldapbase  || true
+db_go || true

@@ -1,0 +1,15 @@
+Package: opendwarf-squashfs-bin
+Version: 1.0.0-0
+Section: net
+Priority: optional
+Architecture: i386
+Essential: no
+Pre-Depends: debconf (>= 0.5) | debconf-2.0
+Depends: libc6
+Recommends: opendwarf-environment
+Conflicts: squashfs-tools
+Installed-Size: 260
+Maintainer: Stefan Nistelberger <scuq@abyle.org>
+Description: Contains the lzma patched squashfs tools
+             mksquashfs,unsquashfs
+             kind of features it has, and so on.

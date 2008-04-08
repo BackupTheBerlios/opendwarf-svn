@@ -1,0 +1,15 @@
+Package: opendwarf-tse
+Version: 1.0.0-0
+Section: net
+Priority: optional
+Architecture: i386
+Essential: no
+Pre-Depends: debconf (>= 0.5) | debconf-2.0
+Depends: nfs-kernel-server, opendwarf-config
+Recommends: opendwarf-environement
+Installed-Size: 6700
+Maintainer: Stefan Nistelberger <scuq@abyle.org>
+Description: Contains the /tse root directory for hosting 
+             netboot images via nfs.
+             This package also includes the opendwarf-kernel
+	     and ramdisk.

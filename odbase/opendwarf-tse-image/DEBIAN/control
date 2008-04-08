@@ -1,0 +1,19 @@
+Package: opendwarf-tse-image
+Version: 1.0.0-0
+Section: net
+Priority: optional
+Architecture: i386
+Essential: no
+Pre-Depends: debconf (>= 0.5) | debconf-2.0
+Depends: opendwarf-config, opendwarf-tse
+Recommends: opendwarf-environment
+Installed-Size: 150000
+Maintainer: Stefan Nistelberger <scuq@abyle.org>
+Description: Contains a complete OpenDwarf Debian for
+             booting opendwarf-clients via tftp/nfs
+             Included in Image:
+		- stable sis graphics driver
+		- fglrx xorg driver
+		- citrix client
+		- iceweasel
+		- fluxbox

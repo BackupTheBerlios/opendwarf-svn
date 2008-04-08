@@ -1,0 +1,260 @@
+<?xml version="1.0"?>
+<conf>
+	<menu>
+		<section name="Administration">
+			<plugin acl="ogroups" class="ogroupManagement" icon="ogroup.png"
+				path="plugins/admin/ogroups" />
+			<plugin acl="department" class="departmentManagement" icon="department.png"
+				path="plugins/admin/departments" />
+			<plugin acl="terminal,workstation,server,phone,component,winworkstation" class="systems" icon="system.png"
+				path="plugins/admin/systems" />
+			<plugin acl="devices" class="deviceManagement"
+				icon="devices.png" path="plugins/admin/devices" />
+
+			<!-- Use 'lock_dn'      for dn
+				'lock_name'    for name
+				'lock_type'    for branch/freeze -->
+			<plugin acl="fai" class="faiManagement" icon="fai.png" 
+				path="plugins/admin/fai" />
+			<plugin acl="acl" class="acl" icon="acl.png"
+				path="plugins/admin/acl" />
+		</section>
+
+		<section name="Addons">
+			<plugin acl="logview" class="logview" icon="logview.png"
+				path="plugins/addons/logview" />
+			<plugin acl="mailqueue" class="mailqueue" icon="mailqueue.png"
+				path="plugins/addons/mailqueue" />
+			<plugin acl="ldapmanager" class="ldif" icon="ldif.png"
+				path="plugins/addons/ldapmanager" />
+			<plugin acl="msgplug" class="msgplug" icon="notifications.png"
+				path="plugins/addons/notifications" />
+		</section>
+	</menu>
+
+	<aclroletab>
+		<tab class="aclRole" name="ACL Role" />
+	</aclroletab>
+
+	<usertabs>
+		<tab class="user" name="Generic" />
+		<tab class="posixAccount" name="Unix" />
+		<tab class="environment" name="Environment" />
+		<tab class="mailAccount" name="Mail" />
+		<tab class="sambaAccount" name="Samba" />
+		<tab class="connectivity" name="Connectivity" />
+		<tab class="gofaxAccount" name="Fax" />
+		<tab class="phoneAccount" name="Phone" />
+	</usertabs>
+
+	<faxblocktabs>
+		<tab class="blocklistGeneric" name="Generic" />
+	</faxblocktabs>
+
+	<mimetabs>
+		<tab class="mimetype" name="Generic" />
+	</mimetabs>
+
+	<devicetabs>
+		<tab class="deviceGeneric" name="Generic" />
+	</devicetabs>
+
+
+	<grouptabs>
+		<tab class="group" name="Generic" />
+		<tab class="environment" name="Environment" />
+		<tab class="appgroup" name="Applications" />
+		<tab class="mailgroup" name="Mail" />
+	</grouptabs>
+
+	<appstabs>
+		<tab class="application" name="Generic" />
+		<tab class="applicationParameters" name="Options" />
+	</appstabs>
+
+	<conferencetabs>
+		<tab class="conference" name="Generic" />
+	</conferencetabs>
+
+	<macrotabs>
+		<tab class="macro" name="Generic" />
+		<tab class="macroParameter" name="Parameter" />
+	</macrotabs>
+
+	<termtabs>
+		<tab class="termgeneric" name="Generic" />
+		<tab class="termstartup" name="Startup" />
+		<tab class="termservice" name="Devices" />
+		<tab class="printgeneric" name="Printer" />
+		<tab class="terminfo" name="Information" 
+			snmpcommunity="goto" />
+		<tab class="glpiAccount" name="Inventory" />
+	</termtabs>
+
+	<servtabs>
+		<tab class="servgeneric" name="Generic" />
+		<tab class="workstartup" name="Startup" />
+		<tab class="ServerService" name="Services" />
+	    <tab class="faiSummaryTab" name="FAI summary" />
+		<tab class="terminfo" name="Information" 
+			snmpcommunity="goto" />
+		<tab class="glpiAccount" name="Inventory" />
+	</servtabs>
+
+	<worktabs>
+		<tab class="workgeneric" name="Generic" />
+		<tab class="workstartup" name="Startup" />
+		<tab class="workservice" name="Devices" />
+		<tab class="printgeneric" name="Printer" />
+		<tab class="terminfo" name="Information" 
+			snmpcommunity="goto" />
+	    <tab class="faiSummaryTab" name="FAI summary" />
+		<tab class="glpiAccount" name="Inventory" />
+	</worktabs>
+
+	<phonetabs>
+		<tab class="phoneGeneric" name="Generic" />
+		<tab class="glpiAccount" name="Inventory" />
+	</phonetabs>
+
+	<componenttabs>
+		<tab class="componentGeneric" name="Generic" />
+		<tab class="glpiAccount" name="Inventory" />
+	</componenttabs>
+
+	<wintabs>
+		<tab class="wingeneric" name="Generic" />
+		<tab class="glpiAccount" name="Inventory" />
+	</wintabs>
+
+	<serverservice>
+		<tab class="goMailServer" />
+		<tab class="goNtpServer" />
+		<tab class="servrepository" />
+		<tab class="goImapServer" />
+		<tab class="goKrbServer" />
+		<tab class="goFaxServer" />
+		<tab class="goFonServer" />
+		<tab class="goLogDBServer" />
+		<tab class="goGlpiServer" />
+		<tab class="goCupsServer" />
+		<tab class="goSyslogServer" />
+		<tab class="goTerminalServer" />
+		<tab class="goLdapServer" />
+		<tab class="goShareServer" />
+		<tab class="servdhcp" />
+		<tab class="servdns" />
+		<tab class="gosaLogServer" />
+	</serverservice>
+
+	<deptabs>
+		<tab class="department" name="Generic" />
+	</deptabs>
+
+	<ogrouptabs>
+		<tab class="ogroup" name="Generic" />
+	</ogrouptabs>
+
+	<connectivity>
+		<tab class="proxyAccount" />
+		<tab class="pureftpdAccount" />
+		<tab class="webdavAccount" />
+		<tab class="phpgwAccount" />
+		<tab class="intranetAccount" />
+		<tab class="opengwAccount"
+			username="OGo"
+			password=""
+			database="OGo"
+			datahost="localhost" />
+	</connectivity>
+
+	<ldiftab>
+		<tab class="ldifexport" name="Export" />
+		<tab class="xlsexport" name="Excel Export" />
+		<tab class="ldifimport" name="Import" />
+		<tab class="csvimport" name="CSV Import" />
+	</ldiftab>
+
+	<faipartitiontabs>
+		<tab class="faiPartitionTable" name="Partitions" />
+	</faipartitiontabs>
+
+	<faiscripttabs>
+		<tab class="faiScript" name="Script" />
+	</faiscripttabs>
+
+	<faihooktabs>
+		<tab class="faiHook" name="Hooks" />
+	</faihooktabs>
+
+	<faivariabletabs>
+		<tab class="faiVariable" name="Variables" />
+	</faivariabletabs>
+
+	<faitemplatetabs>
+		<tab class="faiTemplate" name="Templates" />
+	</faitemplatetabs>
+
+	<faiprofiletabs>
+		<tab class="faiProfile" name="Profiles" />
+		<tab class="faiSummaryTab" name="Summary" />
+	</faiprofiletabs>
+
+	<faipackagetabs>
+		<tab class="faiPackage" name="Packages" />
+	</faipackagetabs>
+
+	<logtabs>
+			<tab class="logview" name="System logs" />
+			<tab class="gosa_logview" name="GOsa logs" />
+	</logtabs>
+	
+	<main default="default"
+		list_summary="false"
+		displayerrors="false"
+		schema_check="true"
+		enableCopyPaste="true"
+		forceglobals="true"
+		forcessl="false"
+		ldapstats="false"
+		warnssl="true"
+		save_filter="true"
+		compressed="true"
+		uniq_identifier="entryCNS"
+		lang=""
+		theme="default"
+		session_lifetime="7200"
+		compile="/var/spool/gosa"
+		debuglevel="0"
+		smbhash='perl -MCrypt::SmbHash -e "print join(q[:], ntlmgen \$ARGV[0]), $/;"'
+		>
+
+		<location name="default"
+			hash="crypt"
+			dnmode="cn"
+			server="ldap://localhost:389"
+			people="ou=people"
+			groups="ou=groups"
+			gidbase="1000"
+			uidbase="1000"
+			login_attribute="uid"
+			timezone="Europe/Berlin"
+			strict_units="false"
+			krbsasl="false"
+			rfc2307bis="false"
+			include_personal_title="false"
+			strict="yes"
+			governmentmode="false"
+			SID="0-815-4711"
+			RIDBASE="1"
+			sambaversion="3"
+
+		
+			config="$CONFIG$">
+
+			<referral url="$LDAPURL$"
+				admin="$ADMIN$"
+				password="$PASSWORD$" />
+		</location>
+	</main>
+</conf>
