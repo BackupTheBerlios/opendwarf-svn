@@ -1,5 +1,0 @@
-Template: opendwarf-config/gosaconffile
-Type: string
-Default: /etc/gosa/gosa.conf-trunk
-Description: full path to gosa config file:
- We'd like to know your gosa conf.
